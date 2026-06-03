@@ -13,6 +13,7 @@ export async function setupTables() {
     return sql.begin(s => [
         s`CREATE TABLE IF NOT EXISTS access_tokens (
             user_id TEXT PRIMARY KEY,
+            instance_uri TEXT NOT NULL,
             llac TEXT NOT NULL
         )`,
         s`CREATE TABLE IF NOT EXISTS thread_mappings (
@@ -22,29 +23,40 @@ export async function setupTables() {
     ])
 }
 
-const llacCache = new Map<string, string>();
+type UserInfo = {
+    instanceUri: string,
+    llac: string
+}
+
+const userCache = new Map<string, UserInfo>();
 const threadMappingCache = new Map<string, string>();
 
-export async function getUserLLAC(userId: string): Promise<string | null> {
-    const cached = llacCache.get(userId);
+export async function getUserInfo(userId: string): Promise<UserInfo | null> {
+    const cached = userCache.get(userId);
     if (cached !== undefined) return cached;
 
-    const res = await sql<{ llac: string }[]>`SELECT llac FROM access_tokens WHERE user_id = ${userId}`;
+    const res = await sql<{ instance_uri: string, llac: string }[]>`SELECT llac, instance_uri FROM access_tokens WHERE user_id = ${userId}`;
 
     if (res.length === 0) return null;
     else {
-        llacCache.set(userId, res[0]!.llac)
-        return res[0]!.llac
+        userCache.set(userId, {
+            instanceUri: res[0]!.instance_uri,
+            llac: res[0]!.llac
+        })
+        return {
+            instanceUri: res[0]!.instance_uri,
+            llac: res[0]!.llac
+        }
     }
 }
 
-export async function setUserLLAC(userId: string, llac: string): Promise<void> {
-    await sql`INSERT INTO access_tokens(user_id, llac)
-    VALUES (${userId}, ${llac})
+export async function setUserInfo(userId: string, userInfo: UserInfo): Promise<void> {
+    await sql`INSERT INTO access_tokens(user_id, instance_uri, llac)
+    VALUES (${userId}, ${userInfo.instanceUri}, ${userInfo.llac})
     ON CONFLICT (user_id)
-    DO UPDATE SET llac = EXCLUDED.llac`;
+    DO UPDATE SET instance_uri = EXCLUDED.instance_uri, llac = EXCLUDED.llac`;
 
-    llacCache.set(userId, llac)
+    userCache.set(userId, userInfo)
 }
 
 export async function getThreadMapping(threadId: string): Promise<string | null> {
