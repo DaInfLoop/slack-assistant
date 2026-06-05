@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { App, type ButtonAction, type BlockAction } from '@slack/bolt';
 import { setupTables, getUserInfo, setUserInfo } from "./postgres";
-import assistant from './assistant';
+import assistant, { askHomeAssistant } from './assistant';
 
 const USE_SOCKET_MODE = !!process.env.APP_TOKEN && (process.env.NODE_ENV || 'development').toLowerCase() == 'development'
 
@@ -11,7 +11,7 @@ const app = new App({
     token: process.env.BOT_TOKEN,
 
     socketMode: USE_SOCKET_MODE,
-    appToken: USE_SOCKET_MODE 
+    appToken: USE_SOCKET_MODE
         ? process.env.APP_TOKEN
         : undefined
 });
@@ -70,7 +70,7 @@ async function renderAppHome(userId: string) {
         }
     });
 
-    if (!res.ok) { 
+    if (!res.ok) {
         await app.client.views.publish({
             user_id: userId,
             view: {
@@ -235,7 +235,7 @@ app.action<BlockAction<ButtonAction>>('settings', async (ctx) => {
                         type: 'plain_text',
                         text: 'Long-lived access token'
                     }
-                }                
+                }
             ]
         }
     })
@@ -255,7 +255,7 @@ app.view('settings', async (ctx) => {
                 Authorization: `Bearer ${inputs.llac}`
             }
         });
-    
+
         if (!res.ok) {
             return await ctx.ack({
                 response_action: 'errors',
@@ -279,6 +279,34 @@ app.view('settings', async (ctx) => {
 
     await setUserInfo(ctx.body.user.id, inputs);
     await renderAppHome(ctx.body.user.id);
+})
+
+app.command('/ha-ask', async (ctx) => {
+    await ctx.ack();
+
+    const userInfo = await getUserInfo(ctx.payload.user_id);
+
+    if (!userInfo) {
+        await ctx.respond("You haven't setup Slack Assistant yet. Check my App Home to get setup!")
+        return;
+    };
+
+    const text = ctx.payload.text?.trim();
+
+    if (!text) {
+        await ctx.respond("You left your message empty...")
+        return;
+    }
+
+    const res = await askHomeAssistant(userInfo, text, undefined);
+
+    if (res === "http_error") {
+        await ctx.respond("Something went wrong.")
+    } else {
+        const response = res.response.speech.plain || res.response.speech.ssml;
+
+        await ctx.respond(response.speech);
+    }
 })
 
 app.event("app_mention", async (ctx) => {
