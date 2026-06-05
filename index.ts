@@ -21,10 +21,7 @@ app.assistant(assistant);
 async function renderAppHome(userId: string) {
     const userInfo = await getUserInfo(userId);
 
-    console.debug("render", userId)
-
     if (userInfo === null) {
-        console.debug("nothin")
         await app.client.views.publish({
             user_id: userId,
             view: {
@@ -74,7 +71,6 @@ async function renderAppHome(userId: string) {
     });
 
     if (!res.ok) { 
-        console.debug("bad data")
         await app.client.views.publish({
             user_id: userId,
             view: {
@@ -113,8 +109,6 @@ async function renderAppHome(userId: string) {
         })
         return;
     }
-
-    console.debug("yippee!")
 
     await app.client.views.publish({
         user_id: userId,

@@ -9,13 +9,13 @@ const config: AssistantConfig = {
 
         if (userInfo === null) {
             ctx.say({
-                text: ":warning: You haven't setup Slack Assistant yet. Visit the App Home to start using the bot!",
+                text: ":warning: You haven't setup Slack Assistant yet. Click the button below to get started:",
                 blocks: [
                     {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: ":warning: You haven't setup Slack Assistant yet. Visit the App Home to start using the bot!",
+                            text: ":warning: You haven't set up Slack Assistant yet. Click the button below to get started:"
                         }
                     },
                     {
@@ -23,12 +23,12 @@ const config: AssistantConfig = {
                         elements: [
                             {
                                 type: 'button',
-                                action_id: 'noop-apphome',
+                                action_id: 'settings',
+                                style: 'primary',
                                 text: {
                                     type: 'plain_text',
-                                    text: 'Visit App Home'
-                                },
-                                url: `https://slack.com/app_redirect?app=${ctx.body.api_app_id}&team=${ctx.body.team_id}`
+                                    text: 'Get started'
+                                }
                             }
                         ]
                     }
@@ -37,23 +37,52 @@ const config: AssistantConfig = {
             return;
         }
 
-        const res = await fetch(new URL("/api/config", userInfo.instanceUri), {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': 'Bearer ' + userInfo.llac
-            }
-        });
+        try {
+            const res = await fetch(new URL("/api/config", userInfo.instanceUri), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': 'Bearer ' + userInfo.llac
+                }
+            });
 
-        if (!res.ok) {
+            if (!res.ok) {
+                ctx.say({
+                    text: ":warning: Your Home Assistant long-lived access token is invalid. Click the button below to add a new one:",
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: ":warning: Your Home Assistant long-lived access token is invalid. Click the button below to add a new one:"
+                            }
+                        },
+                        {
+                            type: 'actions',
+                            elements: [
+                                {
+                                    type: 'button',
+                                    action_id: 'settings',
+                                    text: {
+                                        type: 'plain_text',
+                                        text: 'Settings'
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                })
+                return;
+            }
+        } catch (err) {
             ctx.say({
-                text: ":warning: Your Home Assistant long-lived access token is invalid. Visit the App Home to add a new one.",
+                text: ":warning: Something went wrong trying to contact your Home Assistant. Check your settings.",
                 blocks: [
                     {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: ":warning: Your Home Assistant long-lived access token is invalid. Visit the App Home to add a new one.",
+                            text: ":warning: Something went wrong trying to contact your Home Assistant. Check your settings."
                         }
                     },
                     {
@@ -61,12 +90,11 @@ const config: AssistantConfig = {
                         elements: [
                             {
                                 type: 'button',
-                                action_id: 'noop-apphome',
+                                action_id: 'settings',
                                 text: {
                                     type: 'plain_text',
-                                    text: 'Visit App Home'
-                                },
-                                url: `https://slack.com/app_redirect?app=${ctx.body.api_app_id}&team=${ctx.body.team_id}`
+                                    text: 'Settings'
+                                }
                             }
                         ]
                     }
