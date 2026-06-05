@@ -21,7 +21,10 @@ app.assistant(assistant);
 async function renderAppHome(userId: string) {
     const userInfo = await getUserInfo(userId);
 
+    console.debug("render", userId)
+
     if (userInfo === null) {
+        console.debug("nothin")
         await app.client.views.publish({
             user_id: userId,
             view: {
@@ -71,6 +74,7 @@ async function renderAppHome(userId: string) {
     });
 
     if (!res.ok) { 
+        console.debug("bad data")
         await app.client.views.publish({
             user_id: userId,
             view: {
@@ -110,6 +114,8 @@ async function renderAppHome(userId: string) {
         return;
     }
 
+    console.debug("yippee!")
+
     await app.client.views.publish({
         user_id: userId,
         view: {
@@ -127,7 +133,7 @@ async function renderAppHome(userId: string) {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: ":white_tick_mark: Your Home Assistant configuration has successfully been set. Start messaging or use `/ha-ask` to talk to your Home Assistant!"
+                        text: ":white_check_mark: Your Home Assistant configuration is okay! Start messaging or use `/ha-ask` to talk to your Home Assistant!"
                     }
                 },
                 {
@@ -204,7 +210,7 @@ app.action<BlockAction<ButtonAction>>('settings', async (ctx) => {
                             type: 'plain_text',
                             text: 'https://home.example.com/'
                         },
-                        initial_value: userInfo.instanceUri
+                        initial_value: userInfo.instanceUri || undefined
                     },
                     label: {
                         type: 'plain_text',
@@ -229,7 +235,7 @@ app.action<BlockAction<ButtonAction>>('settings', async (ctx) => {
                             type: 'plain_text',
                             text: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                         },
-                        initial_value: userInfo.llac
+                        initial_value: userInfo.llac || undefined
                     },
                     label: {
                         type: 'plain_text',

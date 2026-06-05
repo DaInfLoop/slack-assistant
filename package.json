@@ -9,7 +9,8 @@
   "dependencies": {
     "@slack/bolt": "^4.7.3",
     "dotenv": "^17.4.2",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "tsx": "^4.22.4"
   },
   "devDependencies": {
     "@types/node": "^25.9.1"
