@@ -1,5 +1,52 @@
-import { Assistant, type AssistantConfig } from "@slack/bolt";
-import { getUserInfo } from "./postgres";
+import { Assistant, type AssistantConfig, type KnownEventFromType } from "@slack/bolt";
+import { getThreadMapping, getUserInfo, setThreadMapping } from "./postgres";
+
+export async function askHomeAssistant(
+    userInfo: NonNullable<Awaited<ReturnType<typeof getUserInfo>>>,
+    text: string,
+    conversationId?: string
+): Promise<{
+    conversation_id: string,
+    response: {
+        response_type: 'action_done' | 'query_answer' | 'done',
+        data: any, // not necessarily needed
+        language: string,
+        speech: {
+            plain: {
+                speech: string
+            },
+            ssml: undefined
+        } | {
+            plain: undefined
+            ssml: {
+                speech: string
+            }
+        }
+    }
+} | "http_error"> {
+    try {
+        const res = await fetch(new URL("/api/conversation/process", userInfo.instanceUri), {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + userInfo.llac
+            },
+            body: JSON.stringify({
+                text,
+                conversation_id: conversationId
+            })
+        });
+
+        if (res.ok) {
+            return await res.json();
+        } else {
+            return "http_error"
+        }
+    } catch (err) {
+        return "http_error"
+    }
+}
 
 const config: AssistantConfig = {
     async threadStarted(ctx) {
@@ -107,7 +154,37 @@ const config: AssistantConfig = {
     },
 
     async userMessage(ctx) {
-        
+        // Let's just assume there's no special message subtype
+        const message = ctx.message as KnownEventFromType<"message"> & { subtype: undefined };
+
+        const userInfo = await getUserInfo(message.user);
+
+        if (!userInfo) return;
+
+        const text = message.text?.trim();
+
+        if (!text) {
+            ctx.say("Hmm, I can't process that since there's no text in your message.")
+            return;
+        }
+
+        const conversationId = await getThreadMapping(message.thread_ts!) ?? undefined;
+
+        await ctx.setStatus({
+            status: 'thinking...'
+        })
+
+        const res = await askHomeAssistant(userInfo, text, conversationId);
+
+        if (res === "http_error") {
+            await ctx.say("Something went wrong.")
+        } else {
+            const response = res.response.speech.plain || res.response.speech.ssml;
+
+            await ctx.say(response.speech);
+            
+            if (!conversationId) await setThreadMapping(message.thread_ts!, res.conversation_id);
+        }
     }
 }
 
