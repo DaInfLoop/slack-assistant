@@ -66,7 +66,7 @@ const config: AssistantConfig = {
                                     type: 'plain_text',
                                     text: 'Visit App Home'
                                 },
-                                url: `https://slack.com/app_redirect?app=${ctx.body.api_app_id}`
+                                url: `https://slack.com/app_redirect?app=${ctx.body.api_app_id}&team=${ctx.body.team_id}`
                             }
                         ]
                     }
