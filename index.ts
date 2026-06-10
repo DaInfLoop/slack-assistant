@@ -1,19 +1,77 @@
 import "dotenv/config";
 
-import { App, type ButtonAction, type BlockAction } from '@slack/bolt';
-import { setupTables, getUserInfo, setUserInfo } from "./postgres";
+import { App, type ButtonAction, type BlockAction, type Installation } from '@slack/bolt';
+import sql, { setupTables, getUserInfo, setUserInfo } from "./postgres";
 import assistant, { askHomeAssistant } from './assistant';
 
-const USE_SOCKET_MODE = !!process.env.APP_TOKEN && (process.env.NODE_ENV || 'development').toLowerCase() == 'development'
-
 const app = new App({
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    stateSecret: process.env.STATE_SECRET,
     signingSecret: process.env.SIGNING_SECRET,
-    token: process.env.BOT_TOKEN,
+    scopes: [
+        "app_mentions:read",
+        "assistant:write",
+        "chat:write",
+        "im:history",
+        "im:read",
+        "mpim:history",
+        "mpim:read",
+        "commands"
+    ],
+    installerOptions: {
+        directInstall: true
+    },
+    installationStore: {
+        async storeInstallation(installation, logger) {
+            const targetId = installation.isEnterpriseInstall ? installation.enterprise?.id : installation.team?.id;
 
-    socketMode: USE_SOCKET_MODE,
-    appToken: USE_SOCKET_MODE
-        ? process.env.APP_TOKEN
-        : undefined
+            if (!targetId) {
+                throw new Error(`Couldn't store an installation: no target ID to be found`)
+            }
+
+            if (!installation.bot) {
+                throw new Error(`Couldn't store an installation: no bot installation was found`)
+            }
+
+            await sql`INSERT INTO installations(target_id, installation)
+            VALUES (${targetId}, ${installation as any})
+            ON CONFLICT (target_id)
+            DO UPDATE SET installation = EXCLUDED.installation`;
+        },
+
+        async fetchInstallation(query, logger) {
+            const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
+
+            if (!targetId) {
+                throw new Error(`Couldn't fetch an installation: no target ID to be found`)
+            } 
+
+            const installations = await sql<{ target_id: string, installation: Installation }[]>`SELECT * FROM installations
+            WHERE target_id = ${targetId}`;
+
+            if (installations.length) {
+                return installations[0]!.installation;
+            } else {
+                throw new Error(`Couldn't fetch an installation: no installation was found`)
+            }
+        },
+
+        async deleteInstallation(query, logger) {
+            const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
+
+            if (!targetId) {
+                throw new Error(`Couldn't delete an installation: no target ID to be found`)
+            } 
+
+            const deletions = await sql`DELETE FROM installations
+            WHERE target_id = ${targetId}`;
+
+            if (!deletions.length) {
+                throw new Error(`Couldn't delete an installation: no installation was found`)
+            }            
+        },
+    }
 });
 
 app.assistant(assistant);

@@ -19,6 +19,10 @@ export async function setupTables() {
         s`CREATE TABLE IF NOT EXISTS thread_mappings (
             thread_id TEXT PRIMARY KEY,
             conversation_id TEXT NOT NULL
+        )`,
+        s`CREATE TABLE IF NOT EXISTS installations (
+            target_id TEXT PRIMARY KEY,
+            installation JSONB NOT NULL
         )`
     ])
 }

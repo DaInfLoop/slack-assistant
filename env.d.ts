@@ -5,8 +5,9 @@ declare global {
             PORT?: string = '3000';
 
             // Slack credentials
-            BOT_TOKEN: string;
-            APP_TOKEN: string;
+            CLIENT_ID: string;
+            CLIENT_SECRET: string;
+            STATE_SECRET: string;
             SIGNING_SECRET: string;
 
             // PostgreSQL connection credentials
