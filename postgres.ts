@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import type { Installation, InstallationStore } from "@slack/bolt";
 
 const sql = postgres({
     host: process.env.PG_HOST,
@@ -87,4 +88,55 @@ export async function setThreadMapping(threadId: string, conversationId: string)
     else {
         threadMappingCache.set(threadId, conversationId)
     }
+}
+
+export const installationStore: InstallationStore = {
+    async storeInstallation(installation, logger) {
+        const targetId = installation.isEnterpriseInstall ? installation.enterprise?.id : installation.team?.id;
+
+        if (!targetId) {
+            throw new Error(`Couldn't store an installation: no target ID to be found`)
+        }
+
+        if (!installation.bot) {
+            throw new Error(`Couldn't store an installation: no bot installation was found`)
+        }
+
+        await sql`INSERT INTO installations(target_id, installation)
+        VALUES (${targetId}, ${installation as any})
+        ON CONFLICT (target_id)
+        DO UPDATE SET installation = EXCLUDED.installation`;
+    },
+
+    async fetchInstallation(query, logger) {
+        const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
+
+        if (!targetId) {
+            throw new Error(`Couldn't fetch an installation: no target ID to be found`)
+        } 
+
+        const installations = await sql<{ target_id: string, installation: Installation }[]>`SELECT * FROM installations
+        WHERE target_id = ${targetId}`;
+
+        if (installations.length) {
+            return installations[0]!.installation;
+        } else {
+            throw new Error(`Couldn't fetch an installation: no installation was found`)
+        }
+    },
+
+    async deleteInstallation(query, logger) {
+        const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
+
+        if (!targetId) {
+            throw new Error(`Couldn't delete an installation: no target ID to be found`)
+        } 
+
+        const deletions = await sql`DELETE FROM installations
+        WHERE target_id = ${targetId}`;
+
+        if (!deletions.length) {
+            throw new Error(`Couldn't delete an installation: no installation was found`)
+        }            
+    },
 }

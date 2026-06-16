@@ -1,7 +1,7 @@
 import "dotenv/config";
 
-import { App, type ButtonAction, type BlockAction, type Installation } from '@slack/bolt';
-import sql, { setupTables, getUserInfo, setUserInfo } from "./postgres";
+import { App, type ButtonAction, type BlockAction, type InstallationQuery } from '@slack/bolt';
+import sql, { setupTables, getUserInfo, setUserInfo, installationStore } from "./postgres";
 import assistant, { askHomeAssistant } from './assistant';
 
 const app = new App({
@@ -22,66 +22,27 @@ const app = new App({
     installerOptions: {
         directInstall: true
     },
-    installationStore: {
-        async storeInstallation(installation, logger) {
-            const targetId = installation.isEnterpriseInstall ? installation.enterprise?.id : installation.team?.id;
-
-            if (!targetId) {
-                throw new Error(`Couldn't store an installation: no target ID to be found`)
-            }
-
-            if (!installation.bot) {
-                throw new Error(`Couldn't store an installation: no bot installation was found`)
-            }
-
-            await sql`INSERT INTO installations(target_id, installation)
-            VALUES (${targetId}, ${installation as any})
-            ON CONFLICT (target_id)
-            DO UPDATE SET installation = EXCLUDED.installation`;
-        },
-
-        async fetchInstallation(query, logger) {
-            const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
-
-            if (!targetId) {
-                throw new Error(`Couldn't fetch an installation: no target ID to be found`)
-            } 
-
-            const installations = await sql<{ target_id: string, installation: Installation }[]>`SELECT * FROM installations
-            WHERE target_id = ${targetId}`;
-
-            if (installations.length) {
-                return installations[0]!.installation;
-            } else {
-                throw new Error(`Couldn't fetch an installation: no installation was found`)
-            }
-        },
-
-        async deleteInstallation(query, logger) {
-            const targetId = query.isEnterpriseInstall ? query.enterpriseId : query.teamId;
-
-            if (!targetId) {
-                throw new Error(`Couldn't delete an installation: no target ID to be found`)
-            } 
-
-            const deletions = await sql`DELETE FROM installations
-            WHERE target_id = ${targetId}`;
-
-            if (!deletions.length) {
-                throw new Error(`Couldn't delete an installation: no installation was found`)
-            }            
-        },
-    }
+    installationStore: installationStore
 });
 
 app.assistant(assistant);
 
-async function renderAppHome(userId: string) {
+async function renderAppHome(userId: string, teamQuery: InstallationQuery<boolean>) {
     const userInfo = await getUserInfo(userId);
+    const installation = await (async () => {
+        try {
+            return installationStore.fetchInstallation(teamQuery, app.logger);
+        } catch (err) {
+            return null
+        }
+    })();
+
+    if (!installation) return;
 
     if (userInfo === null) {
         await app.client.views.publish({
             user_id: userId,
+            token: installation.bot!.token,
             view: {
                 type: 'home',
                 blocks: [
@@ -131,6 +92,7 @@ async function renderAppHome(userId: string) {
     if (!res.ok) {
         await app.client.views.publish({
             user_id: userId,
+            token: installation.bot!.token,
             view: {
                 type: 'home',
                 blocks: [
@@ -170,6 +132,7 @@ async function renderAppHome(userId: string) {
 
     await app.client.views.publish({
         user_id: userId,
+        token: installation.bot!.token,
         view: {
             type: 'home',
             blocks: [
@@ -209,7 +172,11 @@ async function renderAppHome(userId: string) {
 app.event("app_home_opened", async (ctx) => {
     if (ctx.payload.tab !== "home") return;
 
-    await renderAppHome(ctx.payload.user)
+    await renderAppHome(ctx.payload.user, {
+        isEnterpriseInstall: !!ctx.body.enterprise_id,
+        enterpriseId: ctx.body.enterprise_id,
+        teamId: ctx.body.team_id
+    })
 })
 
 app.action<BlockAction<ButtonAction>>('settings', async (ctx) => {
@@ -336,7 +303,11 @@ app.view('settings', async (ctx) => {
     });
 
     await setUserInfo(ctx.body.user.id, inputs);
-    await renderAppHome(ctx.body.user.id);
+    await renderAppHome(ctx.body.user.id, {
+        isEnterpriseInstall: !!ctx.body.is_enterprise_install,
+        enterpriseId: ctx.body.enterprise?.id,
+        teamId: ctx.body.team?.id
+    })
 })
 
 app.command('/ha-ask', async (ctx) => {
